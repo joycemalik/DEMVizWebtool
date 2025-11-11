@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: dem-visualiser
+    env: python
+    plan: free
+    buildCommand: "./build.sh"
+    startCommand: "cd 'DEM Visualiser Web Tool' && gunicorn app:app"
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.10

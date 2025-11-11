@@ -459,4 +459,6 @@ def crop_geotiff(input_file: str, output_file: str, ulx_geo: float, uly_geo: flo
         raise
 
 if __name__ == '__main__':
-    app.run(debug=True)
+    import os
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port, debug=False)
