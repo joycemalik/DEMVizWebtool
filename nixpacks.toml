@@ -1,5 +1,6 @@
 [phases.setup]
-nixPkgs = ["python311", "gdal", "proj"]
+nixPkgs = ["python311", "gdal", "proj", "geos"]
+aptPkgs = ["libgdal-dev", "gdal-bin", "libexpat1"]
 
 [phases.install]
 cmds = ["pip install --upgrade pip", "pip install -r requirements.txt"]

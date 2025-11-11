@@ -1,0 +1,7 @@
+[build]
+builder = "nixpacks"
+
+[deploy]
+startCommand = "cd 'DEM Visualiser Web Tool' && gunicorn app:app"
+restartPolicyType = "on_failure"
+restartPolicyMaxRetries = 10
