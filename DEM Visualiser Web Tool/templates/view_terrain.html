@@ -45,6 +45,44 @@
         .form-group label {
             color: #f8f9fa; /* Light text color */
         }
+        .metadata-panel {
+            margin: 30px auto 0 auto;
+            max-width: 920px;
+            border-radius: 12px;
+            padding: 20px;
+            background: rgba(255, 255, 255, 0.08);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            text-align: left;
+        }
+        .metadata-panel h2 {
+            margin-top: 0;
+            font-size: 1.75rem;
+            color: #f1c40f;
+        }
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-top: 15px;
+        }
+        .metadata-item {
+            background: rgba(0, 0, 0, 0.35);
+            border-radius: 8px;
+            padding: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.12);
+        }
+        .metadata-label {
+            display: block;
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.08rem;
+            color: #cfd3d6;
+        }
+        .metadata-value {
+            font-size: 1.1rem;
+            font-weight: 600;
+            color: #f4f4f4;
+        }
         #loading-spinner {
             width: 50px;
             height: 50px;
@@ -83,12 +121,48 @@
                 <label for="elevation">Elevation:</label>
                 <input type="range" id="elevation" min="0" max="90" step="1" value="45" class="form-control-range">
                 <span id="elevation-value">45</span>°
-                <div id="controls" class="text-center">
-                    <!-- Existing sun controls -->
-                    <button id="save-snapshot" class="btn btn-primary mt-3">Save TIFF</button>
-                </div>
             </div>  
+            <div class="form-group">
+                <label for="height-scale">Height Scale:</label>
+                <input type="range" id="height-scale" min="0.1" max="20" step="0.1" value="1.0" class="form-control-range">
+                <span id="height-scale-value">1.0×</span>
+            </div>
         </div>
+        <div class="text-center mt-3">
+            <button id="save-snapshot" class="btn btn-primary">Save TIFF</button>
+        </div>
+        {% if metadata %}
+        <section class="metadata-panel" aria-labelledby="crop-summary-title">
+            <h2 id="crop-summary-title">Crop Summary</h2>
+            <div class="metadata-grid">
+                <div class="metadata-item">
+                    <span class="metadata-label">Pixels (W × H)</span>
+                    <span class="metadata-value">{{ metadata.width }} × {{ metadata.height }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Resolution (lon, lat)</span>
+                    <span class="metadata-value">{{ '%.6f'|format(metadata.resolution[0]) }}°, {{ '%.6f'|format(metadata.resolution[1]) }}°</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Bounding Box</span>
+                    <span class="metadata-value">{{ '%.6f'|format(metadata.bounds.left) }}, {{ '%.6f'|format(metadata.bounds.top) }} → {{ '%.6f'|format(metadata.bounds.right) }}, {{ '%.6f'|format(metadata.bounds.bottom) }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Elevation (min / mean / max)</span>
+                    <span class="metadata-value">{{ '%.2f'|format(metadata.elevation_stats.min) }} / {{ '%.2f'|format(metadata.elevation_stats.mean) }} / {{ '%.2f'|format(metadata.elevation_stats.max) }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Coordinate Reference</span>
+                    <span class="metadata-value">{{ metadata.crs or 'Unknown' }}</span>
+                </div>
+                <div class="metadata-item">
+                    <span class="metadata-label">Saved File</span>
+                    <span class="metadata-value">{{ metadata.file_path }}</span>
+                </div>
+            </div>
+            <p class="mt-3 mb-0" id="heightmap-summary-note"></p>
+        </section>
+        {% endif %}
     </div>
     <!-- Ensure scripts are in the correct order -->
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
@@ -96,7 +170,7 @@
         const filePath = "{{ file_path }}";
         console.log("Fetching heightmap from path:", filePath);  // Debug statement
 
-        const container = document.getElementById('terrain-container');
+    const container = document.getElementById('terrain-container');
         const loadingSpinner = document.getElementById('loading-spinner');
         loadingSpinner.style.display = 'block';  // Show spinner
 
@@ -121,6 +195,41 @@
         }
 
         // Fetch the heightmap data
+        const heightScaleInput = document.getElementById('height-scale');
+        const heightScaleValue = document.getElementById('height-scale-value');
+        let heightScale = parseFloat(heightScaleInput.value);
+
+        let plane;
+        let geometry;
+        let heightmapData;
+        let gridWidth = 0;
+        let gridHeight = 0;
+
+        function applyHeightScale() {
+            if (!geometry || !heightmapData) {
+                return;
+            }
+
+            const vertices = geometry.attributes.position.array;
+            const scale = heightScale;
+
+            for (let i = 0; i < vertices.length; i += 3) {
+                const xIndex = (i / 3) % gridWidth;
+                const yIndex = Math.floor((i / 3) / gridWidth);
+                const heightValue = heightmapData[yIndex][xIndex];
+                vertices[i + 2] = heightValue * scale;
+            }
+
+            geometry.attributes.position.needsUpdate = true;
+            geometry.computeVertexNormals();
+        }
+
+        heightScaleInput.addEventListener('input', () => {
+            heightScale = parseFloat(heightScaleInput.value);
+            heightScaleValue.textContent = `${heightScale.toFixed(1)}×`;
+            applyHeightScale();
+        });
+
         fetch(`/heightmap?file_path=${encodeURIComponent(filePath)}`)
         .then(response => {
             if (!response.ok) {
@@ -129,29 +238,22 @@
             return response.json();
         })
         .then(data => {
-            const { heightmap, width, height } = data;
+            const { heightmap, width, height, elevation_stats, downsampled, original_width, original_height } = data;
+            gridWidth = width;
+            gridHeight = height;
+            heightmapData = heightmap;
 
             loadingSpinner.style.display = 'none';  // Hide spinner
 
-            const geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1);
-            const vertices = geometry.attributes.position.array;
+            geometry = new THREE.PlaneGeometry(width, height, width - 1, height - 1);
+            plane = new THREE.Mesh(geometry, new THREE.MeshStandardMaterial({ 
+                color: 0x808080,
+                roughness: 1.0,
+                metalness: 0.0
+            }));
 
-            for (let i = 0; i < vertices.length; i += 3) {
-                let x = (i / 3) % width;  // X index
-                let y = Math.floor((i / 3) / width);  // Y index
-                let height = heightmap[y][x];
-                vertices[i + 2] = height;
-            }
-            geometry.computeVertexNormals();
+            applyHeightScale();
 
-            // Create a grey, moon-like material
-            const material = new THREE.MeshStandardMaterial({ 
-                color: 0x808080,  // Grey color
-                roughness: 1.0,   // Rough surface to mimic moon terrain
-                metalness: 0.0    // Non-metallic appearance
-            });
-
-            const plane = new THREE.Mesh(geometry, material);
             plane.rotation.x = - Math.PI / 2;
             scene.add(plane);
 
@@ -206,9 +308,22 @@
                 renderer.render(scene, camera);
             }
             animate();
+
+            const heightmapSummary = document.getElementById('heightmap-summary-note');
+            if (heightmapSummary) {
+                const downsampleSummary = downsampled
+                    ? `Downsampled from ${original_width}×${original_height} to ${width}×${height} for interactive rendering.`
+                    : 'Serving the cropped region at native resolution.';
+                heightmapSummary.textContent = `${downsampleSummary} Elevation range: ${elevation_stats.min.toFixed(2)} → ${elevation_stats.max.toFixed(2)}.`;
+            }
         })
         .catch(error => {
             console.error('Error fetching heightmap data:', error);
+            loadingSpinner.style.display = 'none';
+            const heightmapSummary = document.getElementById('heightmap-summary-note');
+            if (heightmapSummary) {
+                heightmapSummary.textContent = 'Unable to load heightmap data. Check coordinates or try a smaller crop.';
+            }
         });
 
         // Add custom controls for orbital camera movement
@@ -295,7 +410,7 @@
         });
     </script>
     <footer class="footer text-center">
-        <p>&copy; 2024 Chandrayaan Viz Tool | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
+        <p>&copy; 2025 Chandrayaan Viz Tool </p>
     </footer>
 </body>
 </html>

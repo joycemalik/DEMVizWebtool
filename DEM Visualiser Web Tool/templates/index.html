@@ -104,6 +104,80 @@
             background-color: #e0b90f;
         }
 
+        .form-grid {
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            margin-top: 20px;
+        }
+
+        @media (min-width: 992px) {
+            .form-grid {
+                flex-direction: row;
+            }
+            .preview-section,
+            .coordinate-section {
+                flex: 1 1 0;
+            }
+        }
+
+        .coordinate-section {
+            text-align: left;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        .coordinate-section label {
+            font-weight: 600;
+        }
+
+        .coordinate-section input[type="number"] {
+            margin-bottom: 12px;
+        }
+
+        .preview-section {
+            display: none;
+            text-align: left;
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 10px;
+            padding: 16px;
+        }
+
+        #preview-wrapper {
+            position: relative;
+            display: none;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            background: rgba(0, 0, 0, 0.6);
+        }
+
+        #preview-canvas {
+            display: block;
+            max-width: 100%;
+            height: auto;
+            cursor: crosshair;
+        }
+
+        .preview-placeholder {
+            display: none;
+            border: 1px dashed rgba(241, 196, 15, 0.6);
+            border-radius: 8px;
+            padding: 12px;
+            font-size: 0.9rem;
+            background: rgba(0, 0, 0, 0.45);
+        }
+
+        #selection-info {
+            margin-top: 10px;
+            font-size: 0.9rem;
+        }
+
+        #clear-selection {
+            margin-top: 10px;
+        }
+
         .footer {
             background: rgba(0, 0, 0, 0.9);
             color: #d0d0d0;
@@ -157,25 +231,54 @@
     <div class="moon-background"></div>
 
     <div class="upload-section">
+        {% set values = form_values if form_values is defined else {} %}
         <form class="upload-form" method="POST" enctype="multipart/form-data" action="/process" id="upload-form">
             <h2>Upload and Crop TIFF File</h2>
+
+            {% if error_message %}
+            <div class="alert alert-danger" role="alert" id="server-error">
+                {{ error_message }}
+            </div>
+            {% endif %}
+            <div class="alert alert-danger" role="alert" id="client-error" style="display:none;"></div>
 
             <!-- File Upload -->
             <label for="tiff-file">Choose TIFF File:</label>
             <input type="file" id="tiff-file" name="tiff-file" accept=".tiff, .tif" required>
 
-            <!-- Coordinate Inputs -->
-            <label for="ulx_geo">Upper-left x-coordinate (longitude):</label>
-            <input type="text" id="ulx_geo" name="ulx_geo" placeholder="e.g., -122.4194" required>
+            <div id="bounds-info" class="alert alert-info text-left" style="display:none;">
+                <strong>Valid coordinate range</strong>
+                <div id="bounds-content" class="mt-2 small"></div>
+            </div>
 
-            <label for="uly_geo">Upper-left y-coordinate (latitude):</label>
-            <input type="text" id="uly_geo" name="uly_geo" placeholder="e.g., 37.7749" required>
+            <div class="form-grid">
+                <section class="preview-section" id="preview-container" aria-labelledby="preview-instructions">
+                    <p class="small text-muted mb-2" id="preview-instructions">Upload a GeoTIFF to generate a preview for graphical cropping.</p>
+                    <div id="preview-wrapper">
+                        <canvas id="preview-canvas"></canvas>
+                    </div>
+                    <div id="preview-placeholder" class="preview-placeholder">
+                        Upload a GeoTIFF to generate a preview for graphical cropping.
+                    </div>
+                    <div id="selection-info" class="mt-2 text-muted">Drag on the preview to set crop bounds.</div>
+                    <button type="button" class="btn btn-sm btn-outline-light" id="clear-selection" disabled>Clear selection</button>
+                </section>
 
-            <label for="lrx_geo">Lower-right x-coordinate (longitude):</label>
-            <input type="text" id="lrx_geo" name="lrx_geo" placeholder="e.g., -122.4194" required>
+                <section class="coordinate-section" aria-labelledby="coordinate-inputs">
+                    <h3 id="coordinate-inputs" class="h5 text-light mb-3">Coordinate Inputs</h3>
+                    <label for="ulx_geo">Upper-left x-coordinate (longitude)</label>
+                    <input type="number" step="any" id="ulx_geo" name="ulx_geo" placeholder="e.g., -122.4194" value="{{ values.get('ulx_geo', '') }}" required>
 
-            <label for="lry_geo">Lower-right y-coordinate (latitude):</label>
-            <input type="text" id="lry_geo" name="lry_geo" placeholder="e.g., 37.7749" required>
+                    <label for="uly_geo">Upper-left y-coordinate (latitude)</label>
+                    <input type="number" step="any" id="uly_geo" name="uly_geo" placeholder="e.g., 37.7749" value="{{ values.get('uly_geo', '') }}" required>
+
+                    <label for="lrx_geo">Lower-right x-coordinate (longitude)</label>
+                    <input type="number" step="any" id="lrx_geo" name="lrx_geo" placeholder="e.g., -122.4194" value="{{ values.get('lrx_geo', '') }}" required>
+
+                    <label for="lry_geo">Lower-right y-coordinate (latitude)</label>
+                    <input type="number" step="any" id="lry_geo" name="lry_geo" placeholder="e.g., 37.7749" value="{{ values.get('lry_geo', '') }}" required>
+                </section>
+            </div>
 
             <button type="submit">Upload and Crop</button>
         </form>
@@ -185,28 +288,702 @@
     <div id="loader" class="loader">Generating Terrain...</div>
 
     <footer class="footer text-center">
-        <p>&copy; 2024 Chandrayaan Viz Tool | <a href="#">Privacy Policy</a> | <a href="#">Terms of Service</a></p>
+        <p>&copy; 2025 Chandrayaan Viz Tool </p>
     </footer>
 
     <script src="https://kit.fontawesome.com/a076d05399.js"></script>
     <script src="https://code.jquery.com/jquery-3.5.1.slim.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/@popperjs/core@2.5.2/dist/umd/popper.min.js"></script>
     <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+    <script id="server-metadata" type="application/json">{{ bounds_metadata | tojson | safe }}</script>
     <script>
-        document.getElementById('upload-form').addEventListener('submit', function(event) {
-            event.preventDefault(); // Prevent the default form submission
-            
-            var form = document.querySelector('.upload-form');
-            var loader = document.getElementById('loader');
-            
-            form.style.display = 'none'; // Hide the form
-            loader.style.display = 'block'; // Show the loader
+        const uploadForm = document.getElementById('upload-form');
+        const clientError = document.getElementById('client-error');
+        const fileInput = document.getElementById('tiff-file');
+        const boundsInfo = document.getElementById('bounds-info');
+        const boundsContent = document.getElementById('bounds-content');
+        const loaderElement = document.getElementById('loader');
+        const formContainer = document.querySelector('.upload-form');
+        const previewContainer = document.getElementById('preview-container');
+        const previewCanvas = document.getElementById('preview-canvas');
+        const previewWrapper = document.getElementById('preview-wrapper');
+        const previewPlaceholder = document.getElementById('preview-placeholder');
+        const previewInstructions = document.getElementById('preview-instructions');
+        const selectionInfo = document.getElementById('selection-info');
+        const clearSelectionButton = document.getElementById('clear-selection');
+        const ulxField = document.getElementById('ulx_geo');
+        const ulyField = document.getElementById('uly_geo');
+        const lrxField = document.getElementById('lrx_geo');
+        const lryField = document.getElementById('lry_geo');
+        const previewCtx = previewCanvas ? previewCanvas.getContext('2d') : null;
 
-            // Simulate form submission and hide the loader after 6 seconds
-            setTimeout(function() {
-                document.getElementById('upload-form').submit(); // Submit the form
-            }, 6000);
+        let serverMetadata = null;
+        const serverMetadataElement = document.getElementById('server-metadata');
+        if (serverMetadataElement && serverMetadataElement.textContent) {
+            try {
+                serverMetadata = JSON.parse(serverMetadataElement.textContent);
+            } catch (err) {
+                serverMetadata = null;
+            }
+        }
+
+        let currentMetadata = null;
+        let previewImage = null;
+        let drawing = false;
+        let dragStart = null;
+        let dragCurrent = null;
+        let activeSelection = null;
+        let pointerId = null;
+
+        function resetPreviewState() {
+            previewImage = null;
+            drawing = false;
+            dragStart = null;
+            dragCurrent = null;
+            activeSelection = null;
+            pointerId = null;
+            if (previewCtx && previewCanvas && previewCanvas.width && previewCanvas.height) {
+                previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            }
+        }
+
+        function setPreviewInstructions(message) {
+            if (previewInstructions) {
+                previewInstructions.textContent = message;
+            }
+        }
+
+        function showPreviewPlaceholder(message, instructionMessage) {
+            if (!previewContainer) {
+                return;
+            }
+            previewContainer.style.display = 'block';
+            if (previewWrapper) {
+                previewWrapper.style.display = 'none';
+            }
+            if (previewPlaceholder) {
+                previewPlaceholder.textContent = message;
+                previewPlaceholder.style.display = 'block';
+            }
+            setPreviewInstructions(instructionMessage || 'Preview unavailable. Enter coordinates manually using the fields at right.');
+            resetPreviewState();
+            updateSelectionInfo(null, null);
+            if (clearSelectionButton) {
+                clearSelectionButton.disabled = true;
+            }
+        }
+
+        function getPreviewError(metadata) {
+            if (!metadata || !metadata.preview_error) {
+                return null;
+            }
+            const message = String(metadata.preview_error);
+            return message.length > 140 ? message.slice(0, 137) + '...' : message;
+        }
+
+        function showClientError(message) {
+            if (!clientError) {
+                return;
+            }
+            clientError.textContent = message;
+            clientError.style.display = 'block';
+        }
+
+        function hideClientError() {
+            if (!clientError) {
+                return;
+            }
+            clientError.style.display = 'none';
+        }
+
+        function clamp(value, min, max) {
+            return Math.min(Math.max(value, min), max);
+        }
+
+        function formatCoord(value) {
+            const normalized = Math.abs(value) < 1e-9 ? 0 : value;
+            return normalized.toFixed(6);
+        }
+
+        function getCanvasCoordinates(event) {
+            if (!previewCanvas) {
+                return null;
+            }
+            const rect = previewCanvas.getBoundingClientRect();
+            const scaleX = rect.width ? previewCanvas.width / rect.width : 1;
+            const scaleY = rect.height ? previewCanvas.height / rect.height : 1;
+            const x = (event.clientX - rect.left) * scaleX;
+            const y = (event.clientY - rect.top) * scaleY;
+            return {
+                x: clamp(x, 0, previewCanvas.width),
+                y: clamp(y, 0, previewCanvas.height)
+            };
+        }
+
+        function normalizeRect(start, end) {
+            if (!start || !end) {
+                return null;
+            }
+            const x1 = Math.min(start.x, end.x);
+            const x2 = Math.max(start.x, end.x);
+            const y1 = Math.min(start.y, end.y);
+            const y2 = Math.max(start.y, end.y);
+            return { x1, y1, x2, y2 };
+        }
+
+        function drawPreview() {
+            if (!previewCtx || !previewCanvas || !previewImage || !previewImage.complete) {
+                return;
+            }
+            if (!previewCanvas.width || !previewCanvas.height) {
+                return;
+            }
+            previewCtx.clearRect(0, 0, previewCanvas.width, previewCanvas.height);
+            previewCtx.drawImage(previewImage, 0, 0, previewCanvas.width, previewCanvas.height);
+
+            const rect = drawing ? normalizeRect(dragStart, dragCurrent) : activeSelection;
+            if (!rect) {
+                return;
+            }
+            const width = rect.x2 - rect.x1;
+            const height = rect.y2 - rect.y1;
+            if (width <= 0 || height <= 0) {
+                return;
+            }
+
+            previewCtx.save();
+            previewCtx.strokeStyle = '#f1c40f';
+            previewCtx.fillStyle = 'rgba(241, 196, 15, 0.24)';
+            previewCtx.lineWidth = 2;
+            previewCtx.setLineDash([6, 4]);
+            previewCtx.strokeRect(rect.x1, rect.y1, width, height);
+            previewCtx.fillRect(rect.x1, rect.y1, width, height);
+            previewCtx.restore();
+        }
+
+        function coordsFromRect(rect, metadata) {
+            if (!metadata || !metadata.bounds || !metadata.preview) {
+                return null;
+            }
+            const bounds = metadata.bounds;
+            const preview = metadata.preview;
+            const lonSpan = bounds.right - bounds.left;
+            const latSpan = bounds.top - bounds.bottom;
+            if (lonSpan === 0 || latSpan === 0) {
+                return null;
+            }
+
+            const leftLon = bounds.left + (rect.x1 / preview.width) * lonSpan;
+            const rightLon = bounds.left + (rect.x2 / preview.width) * lonSpan;
+            const topLat = bounds.top - (rect.y1 / preview.height) * latSpan;
+            const bottomLat = bounds.top - (rect.y2 / preview.height) * latSpan;
+
+            return {
+                ulx: Math.min(leftLon, rightLon),
+                lrx: Math.max(leftLon, rightLon),
+                uly: Math.max(topLat, bottomLat),
+                lry: Math.min(topLat, bottomLat)
+            };
+        }
+
+        function setCoordinateInputs(coords) {
+            if (!coords) {
+                return;
+            }
+            ulxField.value = formatCoord(coords.ulx);
+            ulyField.value = formatCoord(coords.uly);
+            lrxField.value = formatCoord(coords.lrx);
+            lryField.value = formatCoord(coords.lry);
+        }
+
+        function updateSelectionInfo(rect, coords, options) {
+            if (!selectionInfo) {
+                return;
+            }
+            const details = options || {};
+            const outOfBounds = Boolean(details.outOfBounds);
+            const manualOnly = Boolean(details.manualOnly);
+
+            if (!coords) {
+                selectionInfo.classList.add('text-muted');
+                selectionInfo.classList.remove('text-warning');
+                selectionInfo.innerHTML = 'Drag on the preview to set crop bounds, or enter coordinates manually.';
+                if (clearSelectionButton) {
+                    clearSelectionButton.disabled = true;
+                }
+                return;
+            }
+
+            selectionInfo.classList.remove('text-muted');
+
+            if (!rect) {
+                if (manualOnly && outOfBounds) {
+                    selectionInfo.classList.add('text-warning');
+                } else {
+                    selectionInfo.classList.remove('text-warning');
+                }
+
+                selectionInfo.innerHTML = '<strong>Coordinate selection</strong>' +
+                    '<div>Longitude: ' + formatCoord(coords.ulx) + ' → ' + formatCoord(coords.lrx) + '</div>' +
+                    '<div>Latitude: ' + formatCoord(coords.lry) + ' → ' + formatCoord(coords.uly) + '</div>';
+
+                if (manualOnly) {
+                    selectionInfo.innerHTML += '<div class="mt-1 text-muted">Preview unavailable. Using typed coordinates.</div>';
+                }
+
+                if (outOfBounds) {
+                    selectionInfo.innerHTML += '<div class="text-warning mt-1">Coordinates extend beyond the raster bounds.</div>';
+                }
+
+                if (clearSelectionButton) {
+                    clearSelectionButton.disabled = false;
+                }
+                return;
+            }
+
+            if (outOfBounds) {
+                selectionInfo.classList.add('text-warning');
+            } else {
+                selectionInfo.classList.remove('text-warning');
+            }
+
+            selectionInfo.innerHTML = '<strong>Selected area</strong>' +
+                '<div>Longitude: ' + formatCoord(coords.ulx) + ' → ' + formatCoord(coords.lrx) + '</div>' +
+                '<div>Latitude: ' + formatCoord(coords.lry) + ' → ' + formatCoord(coords.uly) + '</div>' +
+                '<div>Preview pixels: ' + Math.round(rect.x2 - rect.x1) + ' × ' + Math.round(rect.y2 - rect.y1) + '</div>';
+
+            if (outOfBounds) {
+                selectionInfo.innerHTML += '<div class="text-warning mt-1">Selection extends beyond raster bounds.</div>';
+            }
+
+            if (clearSelectionButton) {
+                clearSelectionButton.disabled = false;
+            }
+        }
+
+        function showBoundsError(message) {
+            if (!boundsInfo) {
+                return;
+            }
+            boundsInfo.classList.remove('alert-info');
+            boundsInfo.classList.add('alert-danger');
+            boundsInfo.style.display = 'block';
+            boundsContent.innerHTML = message;
+            showPreviewPlaceholder(message, 'Preview unavailable. Enter coordinates manually using the fields at right.');
+        }
+
+        function renderBounds(metadata, sourceLabel) {
+            if (!boundsInfo || !metadata || !metadata.bounds) {
+                if (boundsInfo) {
+                    boundsInfo.style.display = 'none';
+                }
+                return;
+            }
+
+            const bounds = metadata.bounds;
+            const lonLine = 'Longitude: ' + bounds.left.toFixed(6) + ' → ' + bounds.right.toFixed(6);
+            const latLine = 'Latitude: ' + bounds.bottom.toFixed(6) + ' → ' + bounds.top.toFixed(6);
+            const pixelLine = 'Pixels: ' + metadata.width + ' × ' + metadata.height;
+            const resLine = metadata.resolution
+                ? 'Resolution: ' + metadata.resolution[0].toFixed(6) + '° (lon), ' + metadata.resolution[1].toFixed(6) + '° (lat)'
+                : '';
+            const crsLine = metadata.crs ? 'CRS: ' + metadata.crs : 'CRS: Unknown';
+            const previewError = getPreviewError(metadata);
+            const previewLine = (metadata.preview && metadata.preview.image)
+                ? 'Preview: ' + metadata.preview.width + ' × ' + metadata.preview.height + ' px'
+                : previewError
+                    ? 'Preview unavailable (' + previewError + ')'
+                    : 'Preview unavailable';
+
+            boundsInfo.classList.remove('alert-danger');
+            boundsInfo.classList.add('alert-info');
+            boundsInfo.style.display = 'block';
+
+            const lines = [
+                '<p class="mb-1">' + lonLine + '</p>',
+                '<p class="mb-1">' + latLine + '</p>',
+                '<p class="mb-1">' + pixelLine + '</p>',
+                '<p class="mb-1">' + crsLine + '</p>',
+                '<p class="mb-1">' + previewLine + '</p>'
+            ];
+            if (resLine) {
+                lines.splice(3, 0, '<p class="mb-1">' + resLine + '</p>');
+            }
+            if (sourceLabel) {
+                lines.push('<p class="mb-0 text-muted">Source: ' + sourceLabel + '</p>');
+            }
+
+            boundsContent.innerHTML = lines.join('');
+        }
+
+        function hidePreview() {
+            if (previewContainer) {
+                previewContainer.style.display = 'none';
+            }
+            if (previewWrapper) {
+                previewWrapper.style.display = 'none';
+            }
+            if (previewPlaceholder) {
+                previewPlaceholder.style.display = 'none';
+            }
+            resetPreviewState();
+            if (selectionInfo) {
+                selectionInfo.classList.add('text-muted');
+                selectionInfo.classList.remove('text-warning');
+                selectionInfo.innerHTML = 'Drag on the preview to set crop bounds, or enter coordinates manually.';
+            }
+            if (clearSelectionButton) {
+                clearSelectionButton.disabled = true;
+            }
+            setPreviewInstructions('Upload a GeoTIFF to generate a preview for graphical cropping.');
+        }
+
+        function updatePreview(metadata) {
+            if (!previewCanvas || !previewCtx) {
+                return false;
+            }
+
+            resetPreviewState();
+
+            if (!metadata || !metadata.preview || !metadata.preview.image) {
+                const previewError = getPreviewError(metadata);
+                const placeholderMessage = previewError
+                    ? 'Preview unavailable: ' + previewError
+                    : 'Preview unavailable for this raster. Enter coordinates manually using the fields at right.';
+                showPreviewPlaceholder(placeholderMessage, 'Preview unavailable. Enter coordinates manually using the fields at right.');
+                return false;
+            }
+
+            if (previewContainer) {
+                previewContainer.style.display = 'block';
+            }
+            if (previewPlaceholder) {
+                previewPlaceholder.style.display = 'none';
+            }
+            if (previewWrapper) {
+                previewWrapper.style.display = 'block';
+            }
+            if (clearSelectionButton) {
+                clearSelectionButton.disabled = true;
+            }
+
+            setPreviewInstructions('Drag over the preview to choose a crop window. Coordinates fill automatically.');
+
+            previewImage = new Image();
+            previewImage.onload = () => {
+                previewCanvas.width = metadata.preview.width;
+                previewCanvas.height = metadata.preview.height;
+                activeSelection = null;
+                drawing = false;
+                dragStart = null;
+                dragCurrent = null;
+                drawPreview();
+                updateSelectionInfo(null, null);
+                hydrateSelectionFromInputs(metadata);
+            };
+            previewImage.onerror = () => {
+                showPreviewPlaceholder('Unable to render a preview image for this raster. Enter coordinates manually using the fields at right.');
+                hydrateSelectionFromInputs(metadata);
+            };
+            previewImage.src = metadata.preview.image;
+            return true;
+        }
+
+        function applySelection(rect) {
+            activeSelection = rect;
+            drawPreview();
+            const coords = coordsFromRect(rect, currentMetadata);
+            if (!coords) {
+                updateSelectionInfo(null, null);
+                return;
+            }
+            setCoordinateInputs(coords);
+            updateSelectionInfo(rect, coords);
+            hideClientError();
+        }
+
+        function getInputCoords() {
+            const ulx = parseFloat(ulxField.value);
+            const uly = parseFloat(ulyField.value);
+            const lrx = parseFloat(lrxField.value);
+            const lry = parseFloat(lryField.value);
+            if ([ulx, uly, lrx, lry].some(value => Number.isNaN(value))) {
+                return null;
+            }
+            return { ulx, uly, lrx, lry };
+        }
+
+        function rectFromCoords(coords, metadata) {
+            if (!metadata || !metadata.bounds || !metadata.preview) {
+                return null;
+            }
+            const bounds = metadata.bounds;
+            const preview = metadata.preview;
+            const lonSpan = bounds.right - bounds.left;
+            const latSpan = bounds.top - bounds.bottom;
+            if (lonSpan === 0 || latSpan === 0) {
+                return null;
+            }
+
+            const minLon = Math.min(coords.ulx, coords.lrx);
+            const maxLon = Math.max(coords.ulx, coords.lrx);
+            const maxLat = Math.max(coords.uly, coords.lry);
+            const minLat = Math.min(coords.uly, coords.lry);
+
+            let x1 = ((minLon - bounds.left) / lonSpan) * preview.width;
+            let x2 = ((maxLon - bounds.left) / lonSpan) * preview.width;
+            let y1 = ((bounds.top - maxLat) / latSpan) * preview.height;
+            let y2 = ((bounds.top - minLat) / latSpan) * preview.height;
+
+            const outOfBounds = x1 < 0 || x2 > preview.width || y1 < 0 || y2 > preview.height;
+
+            x1 = clamp(x1, 0, preview.width);
+            x2 = clamp(x2, 0, preview.width);
+            y1 = clamp(y1, 0, preview.height);
+            y2 = clamp(y2, 0, preview.height);
+
+            if (x1 === x2 || y1 === y2) {
+                return null;
+            }
+
+            return {
+                rect: { x1, y1, x2, y2 },
+                outOfBounds
+            };
+        }
+
+        function hydrateSelectionFromInputs(metadata) {
+            const coords = getInputCoords();
+
+            if (!coords) {
+                activeSelection = null;
+                drawPreview();
+                updateSelectionInfo(null, null);
+                return;
+            }
+
+            if (!metadata || !metadata.preview || !metadata.preview.image) {
+                activeSelection = null;
+                let outOfBounds = false;
+                if (metadata && metadata.bounds) {
+                    const b = metadata.bounds;
+                    outOfBounds = coords.ulx < b.left || coords.lrx > b.right || coords.uly > b.top || coords.lry < b.bottom;
+                }
+                updateSelectionInfo(null, coords, { manualOnly: true, outOfBounds });
+                return;
+            }
+
+            const result = rectFromCoords(coords, metadata);
+            if (!result) {
+                activeSelection = null;
+                drawPreview();
+                updateSelectionInfo(null, coords, { manualOnly: true });
+                return;
+            }
+
+            activeSelection = result.rect;
+            drawPreview();
+            updateSelectionInfo(result.rect, coords, { outOfBounds: result.outOfBounds });
+        }
+
+        function handlePointerDown(event) {
+            if (!previewCanvas || !previewImage || !previewImage.complete) {
+                return;
+            }
+            event.preventDefault();
+            pointerId = event.pointerId;
+            if (previewCanvas.setPointerCapture) {
+                try {
+                    previewCanvas.setPointerCapture(pointerId);
+                } catch (err) {}
+            }
+            drawing = true;
+            dragStart = getCanvasCoordinates(event);
+            dragCurrent = dragStart;
+            activeSelection = null;
+            drawPreview();
+        }
+
+        function handlePointerMove(event) {
+            if (!drawing || (pointerId !== null && event.pointerId !== pointerId)) {
+                return;
+            }
+            event.preventDefault();
+            dragCurrent = getCanvasCoordinates(event);
+            drawPreview();
+        }
+
+        function handlePointerUp(event) {
+            if (!drawing || (pointerId !== null && event.pointerId !== pointerId)) {
+                return;
+            }
+            event.preventDefault();
+            dragCurrent = getCanvasCoordinates(event);
+
+            if (previewCanvas && pointerId !== null && previewCanvas.releasePointerCapture) {
+                try {
+                    previewCanvas.releasePointerCapture(pointerId);
+                } catch (err) {}
+            }
+
+            drawing = false;
+            pointerId = null;
+
+            if (!dragStart || !dragCurrent) {
+                return;
+            }
+
+            const rect = normalizeRect(dragStart, dragCurrent);
+            if (!rect || rect.x1 === rect.x2 || rect.y1 === rect.y2) {
+                activeSelection = null;
+                drawPreview();
+                updateSelectionInfo(null, null);
+                return;
+            }
+
+            applySelection(rect);
+        }
+
+        function handleMetadata(metadata, label) {
+            currentMetadata = metadata || null;
+            if (!metadata) {
+                hidePreview();
+                if (boundsInfo) {
+                    boundsInfo.style.display = 'none';
+                }
+                return;
+            }
+            renderBounds(metadata, label);
+            const previewReady = updatePreview(metadata);
+            if (!previewReady) {
+                hydrateSelectionFromInputs(metadata);
+            }
+        }
+
+        if (previewCanvas) {
+            previewCanvas.addEventListener('pointerdown', handlePointerDown);
+            previewCanvas.addEventListener('pointermove', handlePointerMove);
+        }
+        window.addEventListener('pointerup', handlePointerUp);
+        window.addEventListener('pointercancel', handlePointerUp);
+
+        if (clearSelectionButton) {
+            clearSelectionButton.addEventListener('click', () => {
+                const hasPreview = currentMetadata && currentMetadata.preview && currentMetadata.preview.image;
+                activeSelection = null;
+                drawing = false;
+                dragStart = null;
+                dragCurrent = null;
+                if (hasPreview) {
+                    drawPreview();
+                    ulxField.value = '';
+                    ulyField.value = '';
+                    lrxField.value = '';
+                    lryField.value = '';
+                }
+                updateSelectionInfo(null, null);
+                hideClientError();
+                clearSelectionButton.disabled = true;
+            });
+        }
+
+        [ulxField, ulyField, lrxField, lryField].forEach(field => {
+            if (!field) {
+                return;
+            }
+            field.addEventListener('change', () => {
+                if (currentMetadata) {
+                    hydrateSelectionFromInputs(currentMetadata);
+                } else {
+                    const coords = getInputCoords();
+                    updateSelectionInfo(null, coords, { manualOnly: true });
+                }
+            });
         });
+
+        if (serverMetadata) {
+            handleMetadata(serverMetadata, 'previous upload');
+        } else {
+            hidePreview();
+        }
+
+        if (fileInput) {
+            fileInput.addEventListener('change', () => {
+                hideClientError();
+
+                if (!fileInput.files || fileInput.files.length === 0) {
+                    if (boundsInfo) {
+                        boundsInfo.style.display = 'none';
+                    }
+                    hidePreview();
+                    return;
+                }
+
+                const formData = new FormData();
+                formData.append('tiff-file', fileInput.files[0]);
+
+                if (boundsInfo) {
+                    boundsInfo.classList.remove('alert-danger');
+                    boundsInfo.classList.add('alert-info');
+                    boundsInfo.style.display = 'block';
+                    boundsContent.innerHTML = 'Analyzing GeoTIFF bounds…';
+                    showPreviewPlaceholder('Generating preview… Please wait.', 'Generating preview…');
+                }
+
+                fetch('/bounds', {
+                    method: 'POST',
+                    body: formData
+                })
+                    .then(async response => {
+                        const data = await response.json().catch(() => ({}));
+                        if (!response.ok || !data.metadata) {
+                            const message = data.error || 'Unable to read the GeoTIFF bounds.';
+                            showBoundsError(message);
+                            return;
+                        }
+                        handleMetadata(data.metadata, 'current file');
+                    })
+                    .catch(error => {
+                        console.error('Bounds fetch failed:', error);
+                        showBoundsError('Failed to analyze the GeoTIFF. Please try again.');
+                    });
+            });
+        }
+
+        if (uploadForm) {
+            uploadForm.addEventListener('submit', event => {
+                event.preventDefault();
+                hideClientError();
+
+                const ulx = parseFloat(ulxField.value);
+                const uly = parseFloat(ulyField.value);
+                const lrx = parseFloat(lrxField.value);
+                const lry = parseFloat(lryField.value);
+
+                if ([ulx, uly, lrx, lry].some(value => Number.isNaN(value))) {
+                    showClientError('Please provide numeric values for all coordinates.');
+                    return;
+                }
+
+                if (ulx === lrx || uly === lry) {
+                    showClientError('Upper-left and lower-right coordinates must not be identical.');
+                    return;
+                }
+
+                if (uly <= lry) {
+                    showClientError('Upper-left latitude must be greater than lower-right latitude (north to south).');
+                    return;
+                }
+
+                if (formContainer) {
+                    formContainer.style.display = 'none';
+                }
+                if (loaderElement) {
+                    loaderElement.style.display = 'block';
+                }
+                uploadForm.submit();
+            });
+        }
     </script>
 </body>
 </html>

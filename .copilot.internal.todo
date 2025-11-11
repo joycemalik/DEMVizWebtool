@@ -1,0 +1,6 @@
+Investigate 400 response JSON parsing error
+Fix server response formatting for /process errors
+Design preview-based coordinate selection workflow
+Implement preview endpoint returning downsampled raster
+Update frontend to show preview and capture bounding box
+Retest upload/crop flow end-to-end
